@@ -912,10 +912,12 @@ class TMackieCU():
             s = ''
             sa = ''
             sa2 = ''
+            master=' '
             if self.Page == MackieCUPage_Free:
                 s = '  ' + utils.Zeros(self.ColT[m].TrackNum + 1, 2, ' ')
             else:
                 s = mixer.getTrackName(self.ColT[m].TrackNum, 6)
+                master='MASTER '
                 sa = '   '+str(self.ColT[m].TrackNum)+' '
                 if self.ColT[m].TrackNum>99:
                     sa2 = 'C'+str(self.ColT[m].TrackNum).zfill(2)+'  '
@@ -929,7 +931,7 @@ class TMackieCU():
             s2 = s2 + sa
             s3 = s3 + sa2
         self.SendMsg(s1+s2)
-        self.SendMsg(s3[0:105]+ 'MASTER ',1,2)
+        self.SendMsg(s3[0:105]+ master,1,2)
 
     def OnUpdateBeatIndicator(self, Value):
 
@@ -993,7 +995,7 @@ class TMackieCU():
 
         if self.Page != MackieCUPage_Free:
             for m in range(0, len(self.ColT) - 1):
-                self.ColT[m].Peak = max(0, round(mixer.getTrackPeaks(self.ColT[m].TrackNum, midi.PEAK_LR_INV) * self.MeterMax))
+                self.ColT[m].Peak = max(self.ColT[m].Peak, round(mixer.getTrackPeaks(self.ColT[m].TrackNum, midi.PEAK_LR_INV) * self.MeterMax))
             #print(self.ColT[3].Peak)
             n = max(0,round(mixer.getTrackPeaks(MasterPeak, 0) * self.MeterMax))
             device.midiOutSysex(bytes(bytearray([0xd1,n,0xF7])))
@@ -1119,13 +1121,11 @@ class TMackieCU():
 
                         if self.Page == MackieCUPage_FX:
                             # Plugin Parameter Value
-                            paramValue = plugins.getParamValue(int(
-                                Num + self.PluginParamOffset), mixer.trackNumber(), int(self.CurPluginID + self.CurPluginOffset))
+                            paramValue = plugins.getParamValue(int(Num + self.PluginParamOffset), mixer.trackNumber(), int(self.CurPluginID + self.CurPluginOffset))
                             data1 = int(paramValue)
                             # TODO fix when getParamValue starts working
 
-                    device.midiOutNewMsg(midi.MIDI_CONTROLCHANGE + (
-                        (MackieCUNote_Channel_Previous + Num) << 8) + (data1 << 16), self.ColT[Num].LastValueIndex)
+                    device.midiOutNewMsg(midi.MIDI_CONTROLCHANGE + ((MackieCUNote_Channel_Previous + Num) << 8) + (data1 << 16), self.ColT[Num].LastValueIndex)
 
                     # arm, solo, mute
                     device.midiOutNewMsg(((0x00 + Num) << 8) + midi.TranzPort_OffOnBlinkT[int(mixer.isTrackArmed(
@@ -1156,7 +1156,6 @@ class TMackieCU():
 
         f = self.FirstTrackT[self.FirstTrack]
         CurID = mixer.getTrackPluginId(mixer.trackNumber(), 0)
-
         for m in range(0, len(self.ColT)):
             if self.Page == MackieCUPage_Free:
                 # free controls
@@ -1174,13 +1173,14 @@ class TMackieCU():
                     self.ColT[m].TrackNum * 8  # first virtual CC
             else:
                 self.ColT[m].KnobPressEventID = -1
+                ch='CH'+str(self.ColT[m].TrackNum).zfill(2)+ ' - '
 
                 # mixer
                 if m == 8:
                     self.ColT[m].TrackNum = -2
                     self.ColT[m].BaseEventID = midi.REC_MainVol
                     self.ColT[m].SliderEventID = self.ColT[m].BaseEventID
-                    self.ColT[m].SliderName = 'Master Vol'
+                    self.ColT[m].SliderName = 'Master Volume'
                 else:
                     self.ColT[m].TrackNum = midi.TrackNum_Master + \
                         ((f + m) % mixer.trackCount())
@@ -1188,8 +1188,8 @@ class TMackieCU():
                         self.ColT[m].TrackNum, 0)
                     self.ColT[m].SliderEventID = self.ColT[m].BaseEventID + \
                         midi.REC_Mixer_Vol
-                    s = mixer.getTrackName(self.ColT[m].TrackNum)
-                    self.ColT[m].SliderName = s + ' - Vol'
+                    s =  ch+mixer.getTrackName(self.ColT[m].TrackNum)
+                    self.ColT[m].SliderName = s + ' - Volume'
 
                     self.ColT[m].KnobEventID = -1
                     self.ColT[m].KnobResetEventID = -1
@@ -1204,31 +1204,26 @@ class TMackieCU():
                         self.ColT[m].KnobEventID = self.ColT[m].BaseEventID + \
                             midi.REC_Mixer_Pan
                         self.ColT[m].KnobResetEventID = self.ColT[m].KnobEventID
-                        self.ColT[m].KnobName = mixer.getTrackName(
-                            self.ColT[m].TrackNum) + ' - ' + 'Pan'
+                        self.ColT[m].KnobName = mixer.getTrackName(self.ColT[m].TrackNum) + ' - ' + 'Panning'
                     elif self.Page == MackieCUPage_Stereo:
                         self.ColT[m].KnobEventID = self.ColT[m].BaseEventID + \
                             midi.REC_Mixer_SS
                         self.ColT[m].KnobResetEventID = self.ColT[m].KnobEventID
-                        self.ColT[m].KnobName = mixer.getTrackName(
-                            self.ColT[m].TrackNum) + ' - ' + 'Sep'
+                        self.ColT[m].KnobName = mixer.getTrackName(self.ColT[m].TrackNum) + ' - ' + 'Separation'
                     elif self.Page == MackieCUPage_Sends:
                         self.ColT[m].KnobEventID = CurID + \
                             midi.REC_Mixer_Send_First + self.ColT[m].TrackNum
                         s = mixer.getEventIDName(self.ColT[m].KnobEventID)
                         self.ColT[m].KnobName = s
-                        self.ColT[m].KnobResetValue = round(
-                            12800 * midi.FromMIDI_Max / 16000)
-                        self.ColT[m].KnobCenter = mixer.getRouteSendActive(
-                            mixer.trackNumber(), self.ColT[m].TrackNum)
+                        self.ColT[m].KnobResetValue = round(12800 * midi.FromMIDI_Max / 16000)
+                        self.ColT[m].KnobCenter = mixer.getRouteSendActive(mixer.trackNumber(), self.ColT[m].TrackNum)
                         if self.ColT[m].KnobCenter == 0:
                             self.ColT[m].KnobMode = 4
                         else:
                             self.ColT[m].KnobMode = 2
                     elif self.Page == MackieCUPage_FX:
                         if self.CurPluginID == -1:  # Plugin not selected
-                            self.ColT[m].CurID = mixer.getTrackPluginId(
-                                mixer.trackNumber(), m + self.CurPluginOffset)
+                            self.ColT[m].CurID = mixer.getTrackPluginId(mixer.trackNumber(), m + self.CurPluginOffset)
                             self.ColT[m].KnobEventID = self.ColT[m].CurID + \
                                 midi.REC_Plug_MixLevel
                             s = mixer.getEventIDName(self.ColT[m].KnobEventID)
@@ -1243,18 +1238,14 @@ class TMackieCU():
                                 self.ColT[m].KnobMode = 2
                                 # self.ColT[m].KnobPressEventID = self.ColT[m].CurID + midi.REC_Plug_Mute
 
-                                self.ColT[m].TrackName = plugins.getPluginName(
-                                    mixer.trackNumber(), m + self.CurPluginOffset)
+                                self.ColT[m].TrackName = plugins.getPluginName(mixer.trackNumber(), m + self.CurPluginOffset)
                             else:
                                 self.ColT[m].KnobMode = 4
-                            self.ColT[m].KnobCenter = int(
-                                IsValid & IsEnabledAuto)
+                            self.ColT[m].KnobCenter = int(IsValid & IsEnabledAuto)
                         else:  # Plugin selected
-                            self.ColT[m].CurID = mixer.getTrackPluginId(
-                                mixer.trackNumber(), m + self.CurPluginOffset)
+                            self.ColT[m].CurID = mixer.getTrackPluginId(mixer.trackNumber(), m + self.CurPluginOffset)
                             if m + self.PluginParamOffset < plugins.getParamCount(mixer.trackNumber(), self.CurPluginID + self.CurPluginOffset):
-                                self.ColT[m].TrackName = plugins.getParamName(
-                                    m + self.PluginParamOffset, mixer.trackNumber(), self.CurPluginID + self.CurPluginOffset)
+                                self.ColT[m].TrackName = plugins.getParamName(m + self.PluginParamOffset, mixer.trackNumber(), self.CurPluginID + self.CurPluginOffset)
                             self.ColT[m].KnobMode = 2
                             self.ColT[m].KnobEventID = -1
 
@@ -1264,8 +1255,7 @@ class TMackieCU():
                             self.ColT[m].SliderEventID = CurID + \
                                 midi.REC_Mixer_EQ_Gain + m
                             self.ColT[m].KnobResetEventID = self.ColT[m].SliderEventID
-                            s = mixer.getEventIDName(
-                                self.ColT[m].SliderEventID)
+                            s = mixer.getEventIDName(self.ColT[m].SliderEventID)
                             self.ColT[m].SliderName = s
                             self.ColT[m].KnobEventID = CurID + \
                                 midi.REC_Mixer_EQ_Freq + m
@@ -1280,8 +1270,7 @@ class TMackieCU():
                                 self.ColT[m].SliderEventID = CurID + \
                                     midi.REC_Mixer_EQ_Q + m - 3
                                 self.ColT[m].KnobResetEventID = self.ColT[m].SliderEventID
-                                s = mixer.getEventIDName(
-                                    self.ColT[m].SliderEventID)
+                                s = mixer.getEventIDName(self.ColT[m].SliderEventID)
                                 self.ColT[m].SliderName = s
                                 self.ColT[m].KnobEventID = self.ColT[m].SliderEventID
                                 self.ColT[m].KnobName = self.ColT[m].SliderName
@@ -1295,16 +1284,14 @@ class TMackieCU():
 
                     # self.Flip knob & slider
                     if self.Flip:
-                        self.ColT[m].KnobEventID, self.ColT[m].SliderEventID = utils.SwapInt(
-                            self.ColT[m].KnobEventID, self.ColT[m].SliderEventID)
+                        self.ColT[m].KnobEventID, self.ColT[m].SliderEventID = utils.SwapInt(self.ColT[m].KnobEventID, self.ColT[m].SliderEventID)
                         s = self.ColT[m].SliderName
                         self.ColT[m].SliderName = self.ColT[m].KnobName
                         self.ColT[m].KnobName = s
                         self.ColT[m].KnobMode = 2
                         if not (self.Page in [MackieCUPage_Sends, MackieCUPage_FX, MackieCUPage_EQ]):
                             self.ColT[m].KnobCenter = -1
-                            self.ColT[m].KnobResetValue = round(
-                                12800 * midi.FromMIDI_Max / 16000)
+                            self.ColT[m].KnobResetValue = round(12800 * midi.FromMIDI_Max / 16000)
                             self.ColT[m].KnobResetEventID = self.ColT[m].KnobEventID
 
             self.ColT[m].LastValueIndex = 48 + m * 6
@@ -1315,13 +1302,19 @@ class TMackieCU():
     def SetKnobValue(self, Num, Value, Res=midi.EKRes):
 
         if (self.ColT[Num].KnobEventID >= 0) & (self.ColT[Num].KnobMode < 4):
+            ch='CH'+str(self.ColT[Num].TrackNum).zfill(2)+ ' - '
             if Value == midi.MaxInt:
                 if self.Page == MackieCUPage_FX:
-                    # if self.ColT[Num].KnobPressEventID >= 0:
+                    #if self.ColT[Num].KnobPressEventID >= 0:
                     #	Value = channels.incEventValue(self.ColT[Num].KnobPressEventID, 0, midi.EKRes)
                     #	channels.processRECEvent(self.ColT[Num].KnobPressEventID, Value, midi.REC_Controller)
                     #	s = mixer.getEventIDName(self.ColT[Num].KnobPressEventID)
                     #	self.SendMsg2(s)
+                    if self.ColT[Num].KnobPressEventID >= 0:
+                    	Value = channels.incEventValue(self.ColT[Num].KnobPressEventID, 0, midi.EKRes)
+                    	channels.processRECEvent(self.ColT[Num].KnobPressEventID, Value, midi.REC_Controller)
+                    	s = mixer.getEventIDName(self.ColT[Num].KnobPressEventID)
+                    	self.SendMsg2(s)
                     self.CurPluginID = Num
                     self.PluginParamOffset = 0
                     self.UpdateColT()
@@ -1340,7 +1333,7 @@ class TMackieCU():
             s = mixer.getEventIDValueString(self.ColT[Num].KnobEventID, n)
             if s != '':
                 s = ': ' + s
-            self.SendMsg2(self.ColT[Num].KnobName + s)
+            self.SendMsg2(ch+self.ColT[Num].KnobName + s)
 
     def SetFirstTrack(self, Value):
 
