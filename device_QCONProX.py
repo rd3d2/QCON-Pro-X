@@ -47,15 +47,15 @@ MackieCUNote_Save = 0x50
 MackieCUNote_Undo = 0x51
 MackieCUNote_Cancel = 0x52
 MackieCUNote_Enter = 0x53
+MackieCUNote_Shift = 0x54
 
 # Modify
-MackieCUNote_Shift = 0x46
 MackieCUNote_Option = 0x47
 MackieCUNote_Control = 0x48
 MackieCUNote_Alt = 0x49
 
 # Sections
-MackieCUNote_MidiTracks = 0x3E  # Patters
+MackieCUNote_MidiTracks = 0x3E  # Patterns
 MackieCUNote_Inputs = 0x3F  # Mixer Tracks
 MackieCUNote_AudioTracks = 0x40  # Channels
 MackieCUNote_AudioInst = 0x41  # TODO
@@ -73,7 +73,7 @@ MackieCUNote_Latch = 0x4E  # TODO
 MackieCUNote_Group = 0x4F  # TODO
 
 # Transport
-MackieCUNote_Marker = 0x54
+MackieCUNote_Marker = 0x46
 MackieCUNote_Nudge = 0x55  # TODO
 MackieCUNote_Cycle = 0x56
 MackieCUNote_Drop = 0x57
@@ -115,6 +115,10 @@ MackieCUPage_Sends = 2
 MackieCUPage_FX = 3
 MackieCUPage_EQ = 4
 MackieCUPage_Free = 5
+
+# Markers
+MackieCUNote_Marker1= 0x48
+MackieCUNote_Marker2= 0x49
 
 ExtenderLeft = 0
 ExtenderRight = 1
@@ -291,11 +295,13 @@ class TMackieCU():
                 s = 'Marker selection'
             else:
                 s = 'Marker jump'
+                #print(s+" "+self.ArrowsStr) 
             if event.outEv != 0:
                 if transport.globalTransport(midi.FPT_MarkerJumpJog + int(self.Shift), event.outEv, event.pmeFlags) == midi.GT_Global:
                     s = ui.getHintMsg()
+            #print(s)
             self.SendMsg2(self.ArrowsStr + s, 500)
-
+            arrangement.jumpToMarker(1,0)
         elif self.JogSource == MackieCUNote_Undo:
             if event.outEv == 0:
                 s = 'Undo history'
@@ -388,9 +394,10 @@ class TMackieCU():
         ArrowStepT = [2, -2, -1, 1]
         CutCopyMsgT = ('Cut', 'Copy', 'Paste', 'Insert',
                        'Delete')  # FPT_Cut..FPT_Delete
-        #print(event.midiId, event.data1, event.data2)
+        #print(event.midiId, hex(event.midiId),event.data1,hex(event.data1), event.data2,hex(event.data2))
 
         if (event.midiId == midi.MIDI_CONTROLCHANGE):
+            #print("midi control change")
             if (event.midiChan == 0):
                 event.inEv = event.data2
                 if event.inEv >= 0x40:
@@ -425,7 +432,7 @@ class TMackieCU():
                 event.handled = False  # for extra CCs in emulators
 
         elif event.midiId == midi.MIDI_PITCHBEND:  # pitch bend (faders)
-
+            #print("Midi pitchbend")
             if event.midiChan <= 8:
                 event.inEv = event.data1 + (event.data2 << 7)
                 event.outEv = (event.inEv << 16) // 16383
@@ -464,6 +471,7 @@ class TMackieCU():
                         self.ColT[event.midiChan].SliderName + s, 500)
 
         elif (event.midiId == midi.MIDI_NOTEON) | (event.midiId == midi.MIDI_NOTEOFF):  # NOTE
+            #print("midi noteon or off")
             if event.midiId == midi.MIDI_NOTEON:
                 # slider hold
                 if event.data1 in [0x68, 0x69, 0x70]:
@@ -699,8 +707,11 @@ class TMackieCU():
                                     event.data2 > 0) * 2, event.pmeFlags)
 
                     elif event.data1 == MackieCUNote_Cancel:  # ESC
-                        transport.globalTransport(
-                            midi.FPT_Escape + int(self.Shift) * 2, int(event.data2 > 0) * 2, event.pmeFlags)
+                        if self.shift==False:
+                            transport.globalTransport(midi.FPT_Escape + int(self.Shift) * 2, int(event.data2 > 0) * 2, event.pmeFlags)
+                        #else
+                            #ToDo: cancel marker selection here?:
+
                     elif event.data1 == MackieCUNote_Enter:  # ENTER
                         transport.globalTransport(
                             midi.FPT_Enter + int(self.Shift) * 2, int(event.data2 > 0) * 2, event.pmeFlags)
@@ -806,6 +817,7 @@ class TMackieCU():
                                 self.SendMsg2(ui.getHintMsg())
 
                     elif (event.data1 == MackieCUNote_Marker) & (self.Control):  # marker add
+                        #print("market add?")
                         if (transport.globalTransport(midi.FPT_AddMarker + int(self.Shift), int(event.data2 > 0) * 2, event.pmeFlags) == midi.GT_Global) & (event.data2 > 0):
                             self.SendMsg2(ui.getHintMsg())
                     # select mixer track
@@ -853,7 +865,20 @@ class TMackieCU():
                     elif event.data1 == MackieCUNote_Save:  # save/save new
                         transport.globalTransport(
                             midi.FPT_Save + int(self.Shift), int(event.data2 > 0) * 2, event.pmeFlags)
-
+                    elif ((event.data1 == MackieCUNote_Marker1) & (event.data2 == 127)): #For now lets jump back a marker 
+                        if (self.Shift):
+                            arrangement.jumpToMarker(-1,True)   
+                            self.SendMsg2("Marker Jump Backward and Selection made", 500)
+                        else:
+                            arrangement.jumpToMarker(-1,False)      
+                            self.SendMsg2("Marker Jump Backward", 500)
+                    elif  ((event.data1 == MackieCUNote_Marker2)  & (event.data2 == 127)): #for now lets jump forward a marker
+                        if (self.Shift):
+                            arrangement.jumpToMarker(1,True)  
+                            self.SendMsg2("Marker Jump Forward and Selection Made" ,500)
+                        else:    
+                            arrangement.jumpToMarker(1,False)      
+                            self.SendMsg2("Marker Jump Forward", 500)
                     event.handled = True
                 else:
                     event.handled = False
@@ -915,6 +940,16 @@ class TMackieCU():
             master=' '
             if self.Page == MackieCUPage_Free:
                 s = '  ' + utils.Zeros(self.ColT[m].TrackNum + 1, 2, ' ')
+            #elif self.Page == MackieCUPage_EQ:
+            #    if plugins.isValid(self.ColT[m].TrackNum,m):
+            #        s = plugins.getPluginName(self.ColT[m].TrackNum,m)[0:6]
+            #        print(s[0:6])
+            #    else:
+            #        s='      ' 
+            #    if self.ColT[m].TrackNum>99:
+            #        sa2 = 'C'+str(self.ColT[m].TrackNum).zfill(2)+'  '
+            #    else:
+            #        sa2 = 'CH'+str(self.ColT[m].TrackNum).zfill(2)+'  '
             else:
                 s = mixer.getTrackName(self.ColT[m].TrackNum, 6)
                 master='MASTER '
@@ -994,9 +1029,11 @@ class TMackieCU():
     def OnUpdateMeters(self):
 
         if self.Page != MackieCUPage_Free:
+            #for m in range(0, len(self.ColT) - 1):
+            #    self.ColT[m].Peak = max(self.ColT[m].Peak, round(mixer.getTrackPeaks(self.ColT[m].TrackNum, midi.PEAK_LR_INV) * self.MeterMax))
             for m in range(0, len(self.ColT) - 1):
-                self.ColT[m].Peak = max(self.ColT[m].Peak, round(mixer.getTrackPeaks(self.ColT[m].TrackNum, midi.PEAK_LR_INV) * self.MeterMax))
-            #print(self.ColT[3].Peak)
+                self.ColT[m].Peak = max(0, round(mixer.getTrackPeaks(self.ColT[m].TrackNum, 0) * self.MeterMax))
+           #print(self.ColT[3].Peak)
             n = max(0,round(mixer.getTrackPeaks(MasterPeak, 0) * self.MeterMax))
             device.midiOutSysex(bytes(bytearray([0xd1,n,0xF7])))
             n = max(0,round(mixer.getTrackPeaks(MasterPeak, 1) * self.MeterMax))
@@ -1560,3 +1597,4 @@ def DisplayName(name):
     shortName += lastWord[1:]
 
     return shortName[0:7]
+
