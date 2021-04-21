@@ -180,6 +180,7 @@ class TMackieCU():
         self.SmoothSpeed = 0
         self.MeterMax = 0
         self.ActivityMax = 0
+        self.DefaultJogToPlaylist = True
 
         self.MackieCU_PageNameT = ('Panning                          (press VPOT to reset)', 'Stereo separation                (press VPOT to reset)','Sends for selected track        (press VPOT to enable)',
                                    'Effects for selected track      (turn VPOTS to adjust)', 'EQ for selected track           (press VPOTS to reset)',  '(Free Controls)')
@@ -473,6 +474,8 @@ class TMackieCU():
         elif (event.midiId == midi.MIDI_NOTEON) | (event.midiId == midi.MIDI_NOTEOFF):  # NOTE
             #print("midi noteon or off")
             if event.midiId == midi.MIDI_NOTEON:
+                if self.DefaultJogToPlaylist:
+                    ui.setFocused(midi.widPlaylist)
                 # slider hold
                 if event.data1 in [0x68, 0x69, 0x70]:
                     self.SliderHoldCount += -1 + (int(event.data2 > 0) * 2)
