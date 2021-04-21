@@ -279,6 +279,8 @@ class TMackieCU():
             self.SendMsg2(self.ArrowsStr + 'Pattern: ' + s, 500)
 
     def Jog(self, event):
+        if (self.DefaultJogToPlaylist & (self.Scrub==False)):
+            ui.setFocused(midi.widPlaylist)
         if self.JogSource == 0:
             if self.Scrub:
                 # there is no scrub equivalent, it would be great to implement jog at lower scale (not just by bars)
@@ -395,6 +397,7 @@ class TMackieCU():
         ArrowStepT = [2, -2, -1, 1]
         CutCopyMsgT = ('Cut', 'Copy', 'Paste', 'Insert',
                        'Delete')  # FPT_Cut..FPT_Delete
+        #print("midiID,HEX,data1,hex,data2,hex")
         #print(event.midiId, hex(event.midiId),event.data1,hex(event.data1), event.data2,hex(event.data2))
 
         if (event.midiId == midi.MIDI_CONTROLCHANGE):
@@ -474,8 +477,6 @@ class TMackieCU():
         elif (event.midiId == midi.MIDI_NOTEON) | (event.midiId == midi.MIDI_NOTEOFF):  # NOTE
             #print("midi noteon or off")
             if event.midiId == midi.MIDI_NOTEON:
-                if self.DefaultJogToPlaylist:
-                    ui.setFocused(midi.widPlaylist)
                 # slider hold
                 if event.data1 in [0x68, 0x69, 0x70]:
                     self.SliderHoldCount += -1 + (int(event.data2 > 0) * 2)
@@ -710,10 +711,8 @@ class TMackieCU():
                                     event.data2 > 0) * 2, event.pmeFlags)
 
                     elif event.data1 == MackieCUNote_Cancel:  # ESC
-                        if self.shift==False:
-                            transport.globalTransport(midi.FPT_Escape + int(self.Shift) * 2, int(event.data2 > 0) * 2, event.pmeFlags)
-                        #else
-                            #ToDo: cancel marker selection here?:
+                        if (self.Shift == False):
+                            transport.globalTransport(midi.FPT_Escape + int(self.Shift) * 2, int(event.data2 > 0) * 2, event.pmeFlags)                           
 
                     elif event.data1 == MackieCUNote_Enter:  # ENTER
                         transport.globalTransport(
